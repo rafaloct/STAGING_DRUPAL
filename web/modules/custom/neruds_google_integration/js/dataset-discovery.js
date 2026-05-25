@@ -103,6 +103,29 @@
     return card;
   };
 
+  const renderSkeletonCard = () => {
+    const skeleton = createElement("div", "neruds-dataset-card neruds-skeleton");
+    skeleton.innerHTML = `
+      <div class="neruds-skeleton-heading neruds-skeleton"></div>
+      <div class="neruds-skeleton-snippet neruds-skeleton"></div>
+      <div class="neruds-skeleton-text neruds-skeleton"></div>
+      <div class="neruds-skeleton-text short neruds-skeleton"></div>
+      <div class="neruds-skeleton-actions">
+        <div class="neruds-skeleton" style="flex: 1;"></div>
+        <div class="neruds-skeleton" style="flex: 1;"></div>
+      </div>
+    `;
+    return skeleton;
+  };
+
+  const renderSkeletonGrid = (count = 6) => {
+    const container = createElement("div", "neruds-dataset-discovery__grid");
+    for (let i = 0; i < count; i++) {
+      container.append(renderSkeletonCard());
+    }
+    return container;
+  };
+
   const renderResults = (state, data) => {
     state.results.innerHTML = "";
     const items = data.items || [];
@@ -122,6 +145,7 @@
       offset: state.pagination.offset.toString(),
     };
     setStatus(state, "Carregando datasets...");
+    state.results.replaceChildren(renderSkeletonGrid(state.pagination.limit));
     try {
       const response = await fetch(buildUrl(state.datasetsEndpoint, params), {
         headers: { Accept: "application/json" },

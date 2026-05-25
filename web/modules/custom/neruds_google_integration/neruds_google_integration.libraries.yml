@@ -45,6 +45,11 @@ territorial_timeline:
     - core/drupalSettings
     - core/once
 
+skeleton_screens:
+  css:
+    theme:
+      css/components/skeleton-screens.css: {}
+
 publication_discovery:
   css:
     theme:
@@ -55,6 +60,7 @@ publication_discovery:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - neruds_google_integration/skeleton_screens
 
 dataset_discovery:
   css:
@@ -66,6 +72,7 @@ dataset_discovery:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - neruds_google_integration/skeleton_screens
 
 territorial_news:
   css:
