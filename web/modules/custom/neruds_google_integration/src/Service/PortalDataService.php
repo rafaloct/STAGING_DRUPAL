@@ -246,6 +246,67 @@ final class PortalDataService {
   }
 
   /**
+   * Returns operational readiness for forum moderation queue.
+   */
+  public function getForumModerationStatus(): array {
+    return $this->remember('neruds_google_integration:forum_moderation', function (): array {
+      return [
+        'moderation_enforced' => TRUE,
+        'queue' => [
+          'pending' => $this->countGroupForumCommentsByStatus(0),
+          'published' => $this->countGroupForumCommentsByStatus(1),
+        ],
+        'approval_url' => '/admin/content/comment/approval',
+        'updated' => gmdate('c'),
+      ];
+    });
+  }
+
+  /**
+   * Returns search-readiness diagnostics for Vertex/CSE operations.
+   */
+  public function getSearchReadiness(): array {
+    $config = $this->configFactory->get('neruds_google_integration.settings');
+    $scope = getenv('NERUDS_SITE_SEARCH_SCOPE') ?: ($config->get('site_search_scope') ?: 'neruds.org/publicacoes');
+
+    return $this->remember('neruds_google_integration:search_readiness', function () use ($scope): array {
+      $servingConfig = $this->envOrConfig('NERUDS_VERTEX_SEARCH_SERVING_CONFIG', 'vertex_search_serving_config');
+      $token = $this->vertexAccessToken();
+      $cx = $this->envOrConfig('NERUDS_GOOGLE_SEARCH_CX', 'google_programmable_search_cx');
+
+      $vertexProbe = ['items' => []];
+      if ($servingConfig !== '' && $token !== '') {
+        $vertexProbe = $this->searchVertexAi($servingConfig, $token, 'territorio', 1);
+      }
+
+      $previewCount = count($vertexProbe['items'] ?? []);
+      $totalSize = (int) ($vertexProbe['totalSize'] ?? 0);
+      $connected = (bool) ($vertexProbe['vertex_connected'] ?? FALSE);
+
+      return [
+        'vertex' => [
+          'serving_config_present' => $servingConfig !== '',
+          'token_present' => $token !== '',
+          'connected' => $connected,
+          'indexed_results_preview' => $previewCount,
+          'total_size' => $totalSize,
+        ],
+        'google_cse' => [
+          'cx_present' => $cx !== '',
+        ],
+        'site_scope' => $scope,
+        'recommended_provider' => ($connected && ($previewCount > 0 || $totalSize > 0)) ? 'vertex_ai_search' : ($cx !== '' ? 'google_cse_widget_with_drupal_metrics' : 'drupal_editorial_fallback'),
+        'next_steps' => [
+          'Share source data to the Vertex data store and run ingest.',
+          'Retest this endpoint until indexed_results_preview is greater than 0.',
+          'Keep Drupal metrics/facets as canonical counts for publication discovery.',
+        ],
+        'updated' => gmdate('c'),
+      ];
+    });
+  }
+
+  /**
    * Queries Google Drive folder files with either bearer token or API key.
    */
   private function requestDriveFiles(string $folderId, string $accessToken, string $apiKey, bool &$requestFailed): array {
@@ -662,6 +723,31 @@ final class PortalDataService {
       ];
     }
     return $normalized;
+  }
+
+  private function countGroupForumCommentsByStatus(int $status): int {
+    try {
+      $groupBundles = $this->existingNodeBundles(['grupo_estudos', 'grupo_estudo']);
+      $groupNids = $this->entityTypeManager->getStorage('node')->getQuery()
+        ->accessCheck(FALSE)
+        ->condition('type', $groupBundles, 'IN')
+        ->execute();
+      if ($groupNids === []) {
+        return 0;
+      }
+
+      return (int) $this->entityTypeManager->getStorage('comment')->getQuery()
+        ->accessCheck(FALSE)
+        ->condition('entity_type', 'node')
+        ->condition('field_name', 'comment')
+        ->condition('status', $status)
+        ->condition('entity_id', array_values($groupNids), 'IN')
+        ->count()
+        ->execute();
+    }
+    catch (\Throwable) {
+      return 0;
+    }
   }
 
   private function extractDriveFolderId(string $input): string {

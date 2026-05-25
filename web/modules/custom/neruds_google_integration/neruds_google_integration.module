@@ -46,6 +46,18 @@ function neruds_google_integration_theme(): array {
 }
 
 /**
+ * Implements hook_permission().
+ */
+function neruds_google_integration_permission(): array {
+  return [
+    'bypass neruds forum moderation' => [
+      'title' => t('Bypass NERUDS forum moderation'),
+      'description' => t('Publish new group forum comments without moderation queue.'),
+    ],
+  ];
+}
+
+/**
  * Implements hook_library_info_alter().
  */
 function neruds_google_integration_library_info_alter(array &$libraries, string $extension): void {
@@ -129,6 +141,7 @@ function neruds_google_integration_preprocess_node(array &$variables): void {
   if ($node->bundle() === 'grupo_estudos') {
     $variables['#attached']['library'][] = 'neruds_google_integration/google_drive_documents';
     $variables['#attached']['library'][] = 'neruds_google_integration/research_communities';
+    $variables['neruds_forum_moderated'] = TRUE;
 
     if ($node->hasField('field_drive_folder_url') && !$node->get('field_drive_folder_url')->isEmpty()) {
       $variables['neruds_group_drive_url'] = $node->get('field_drive_folder_url')->value;
@@ -138,5 +151,78 @@ function neruds_google_integration_preprocess_node(array &$variables): void {
 
   if ($node->bundle() === 'noticia') {
     $variables['#attached']['library'][] = 'neruds_google_integration/territorial_news';
+  }
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function neruds_google_integration_entity_presave(\Drupal\Core\Entity\EntityInterface $entity): void {
+  if ($entity instanceof \Drupal\comment\CommentInterface) {
+    _neruds_google_integration_enforce_group_forum_moderation($entity);
+  }
+}
+
+/**
+ * Implements hook_comment_presave().
+ */
+function neruds_google_integration_comment_presave(\Drupal\comment\CommentInterface $comment): void {
+  _neruds_google_integration_enforce_group_forum_moderation($comment, FALSE);
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function neruds_google_integration_entity_insert(\Drupal\Core\Entity\EntityInterface $entity): void {
+  if ($entity instanceof \Drupal\comment\CommentInterface) {
+    _neruds_google_integration_enforce_group_forum_moderation($entity, TRUE);
+  }
+}
+
+/**
+ * Forces moderation queue for non-privileged group forum comments.
+ */
+function _neruds_google_integration_enforce_group_forum_moderation(\Drupal\comment\CommentInterface $comment, bool $persistAfterSave = FALSE): void {
+  static $updating = [];
+  $id = (string) ($comment->id() ?? spl_object_id($comment));
+  if (isset($updating[$id])) {
+    return;
+  }
+
+  if (!$comment->isNew()) {
+    if (!$persistAfterSave) {
+      return;
+    }
+  }
+
+  if ($comment->getCommentedEntityTypeId() !== 'node') {
+    return;
+  }
+
+  $commented_id = (int) $comment->getCommentedEntityId();
+  if ($commented_id <= 0) {
+    return;
+  }
+
+  $commented = \Drupal::entityTypeManager()->getStorage('node')->load($commented_id);
+  if (!$commented instanceof \Drupal\node\NodeInterface || $commented->bundle() !== 'grupo_estudos') {
+    return;
+  }
+
+  $account = \Drupal::currentUser();
+  if ($account->hasPermission('administer comments') || $account->hasPermission('bypass neruds forum moderation')) {
+    return;
+  }
+
+  $changed = FALSE;
+  if ((int) $comment->get('status')->value !== 0) {
+    $comment->set('status', 0);
+    $changed = TRUE;
+  }
+
+  if ($persistAfterSave && $changed) {
+    $updating[$id] = TRUE;
+    $comment->save();
+    unset($updating[$id]);
   }
 }
