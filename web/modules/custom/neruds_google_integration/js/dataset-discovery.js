@@ -147,7 +147,7 @@
     setStatus(state, "Carregando datasets...");
     state.results.replaceChildren(renderSkeletonGrid(state.pagination.limit));
     try {
-      const response = await fetch(buildUrl(state.datasetsEndpoint, params), {
+      const response = await window.fetchWithRetry(buildUrl(state.datasetsEndpoint, params), {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) {

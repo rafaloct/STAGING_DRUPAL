@@ -45,6 +45,10 @@ territorial_timeline:
     - core/drupalSettings
     - core/once
 
+retry_helper:
+  js:
+    js/retry-helper.js: {}
+
 skeleton_screens:
   css:
     theme:
@@ -61,6 +65,7 @@ publication_discovery:
     - core/drupalSettings
     - core/once
     - neruds_google_integration/skeleton_screens
+    - neruds_google_integration/retry_helper
 
 dataset_discovery:
   css:
@@ -73,6 +78,7 @@ dataset_discovery:
     - core/drupalSettings
     - core/once
     - neruds_google_integration/skeleton_screens
+    - neruds_google_integration/retry_helper
 
 territorial_news:
   css:

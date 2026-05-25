@@ -195,7 +195,7 @@
           });
           const url = `${endpoint}?${requestParams.toString()}`;
           results.replaceChildren(renderSkeletonGrid(5));
-          fetch(url)
+          window.fetchWithRetry(url, { headers: { Accept: 'application/json' } })
             .then((response) => response.json())
             .then((data) => {
               if (typeof window.gtag === 'function') {
@@ -210,6 +210,12 @@
               renderSummary(summary, data);
               renderFacets(facets, data, query);
               renderResults(results, data);
+            })
+            .catch((error) => {
+              const errorMsg = document.createElement('p');
+              errorMsg.textContent = 'Erro ao buscar resultados. Tente novamente.';
+              results.replaceChildren(errorMsg);
+              console.error('Publication search failed:', error);
             });
         };
 
@@ -219,11 +225,16 @@
           runSearch(query);
         });
 
-        fetch(`${metricsEndpoint}${window.location.search || ''}`)
+        window.fetchWithRetry(`${metricsEndpoint}${window.location.search || ''}`, {
+          headers: { Accept: 'application/json' },
+        })
           .then((response) => response.json())
           .then((data) => {
             renderSummary(summary, data);
             renderFacets(facets, data, initialQuery);
+          })
+          .catch((error) => {
+            console.error('Metrics fetch failed:', error);
           });
 
         if (initialQuery) {
