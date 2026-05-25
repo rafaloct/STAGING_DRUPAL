@@ -1,0 +1,110 @@
+{#
+ * @file
+ * NERUDS Theme — Publicação Científica (Full View)
+ *
+ * Exibe autores via field_pesquisadores_autores (referência) ou field_autores (texto).
+ * Título preservado como no banco — sem text-transform no template.
+ * Sem dados de perfil de usuário (sem "Membro há X meses").
+ #}
+
+{%
+  set classes = [
+    'node',
+    'node--publicacao-cientifica',
+    'node--publicacao-cientifica--full',
+    not node.isPublished() ? 'unpublished',
+  ]
+%}
+
+<article{{ attributes.addClass(classes) }}>
+
+  <div class="node--publicacao__content">
+
+    {# Título da publicação (respeita a capitalização do banco) #}
+    <h1{{ title_attributes.addClass('node--publicacao__title') }}>{{ label }}</h1>
+
+    {# Meta: ano, tipo, autores #}
+    <div class="node--publicacao__meta">
+
+      {% if node.field_ano_publicacao.value %}
+        <span class="node--publicacao__ano">{{ node.field_ano_publicacao.value }}</span>
+      {% endif %}
+
+      {% if node.field_tipo_publicacao.0 %}
+        <span class="node--publicacao__tipo">{{ content.field_tipo_publicacao }}</span>
+      {% endif %}
+
+      {# Autores: prefere pesquisadores vinculados, fallback para texto livre #}
+      {% if node.field_pesquisadores_autores.0 %}
+        <div class="node--publicacao__autores">
+          <strong>{{ 'Autores'|t }}:</strong>
+          {{ content.field_pesquisadores_autores }}
+        </div>
+      {% elseif node.field_autores.0 %}
+        <div class="node--publicacao__autores">
+          <strong>{{ 'Autores'|t }}:</strong>
+          {% for item in node.field_autores %}
+            {{ item.value }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {# Revista/Veículo #}
+      {% if node.field_revista_veiculo.value %}
+        <div class="node--publicacao__revista">
+          <em>{{ node.field_revista_veiculo.value }}</em>
+        </div>
+      {% endif %}
+
+    </div>
+
+    {# DOI / Link de acesso #}
+    {% if node.field_doi.value or node.field_link_publicacao.0 %}
+      <div class="node--publicacao__links">
+        {% if node.field_doi.value %}
+          {{ content.field_doi }}
+        {% endif %}
+        {% if node.field_link_publicacao.0 %}
+          {{ content.field_link_publicacao }}
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {# Resumo #}
+    {% if node.field_resumo_publicacao.0 %}
+      <div class="node--publicacao__resumo">
+        <h2>{{ 'Resumo'|t }}</h2>
+        {{ content.field_resumo_publicacao }}
+      </div>
+    {% endif %}
+
+    {# PDF #}
+    {% if node.field_pdf.0 %}
+      <div class="node--publicacao__pdf">
+        {{ content.field_pdf }}
+      </div>
+    {% endif %}
+
+    {# Eixos e Linhas de pesquisa #}
+    {% if node.field_eixos_tematicos.0 %}
+      <div class="node--publicacao__eixos">
+        {{ content.field_eixos_tematicos }}
+      </div>
+    {% endif %}
+
+    {% if node.field_linhas_pesquisa.0 %}
+      <div class="node--publicacao__linhas">
+        {{ content.field_linhas_pesquisa }}
+      </div>
+    {% endif %}
+
+    {# ODS #}
+    {% if node.field_ods_interesse.0 %}
+      <div class="node--publicacao__ods">
+        {{ content.field_ods_interesse }}
+      </div>
+    {% endif %}
+
+  </div>
+
+</article>
