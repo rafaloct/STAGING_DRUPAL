@@ -60,7 +60,7 @@
   align-items: end;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(14rem, 1fr) minmax(10rem, 16rem) auto;
+  grid-template-columns: minmax(14rem, 1fr) minmax(9rem, 14rem) minmax(9rem, 14rem) auto auto;
   margin: 2rem auto 1rem;
   max-width: 72rem;
 }
@@ -104,6 +104,16 @@
 .neruds-dataset-discovery button:hover,
 .neruds-dataset-card__actions a:hover {
   background: #1f4424;
+}
+
+.neruds-dataset-discovery__button--secondary {
+  background: #fff !important;
+  color: var(--neruds-green) !important;
+  border: 1px solid var(--neruds-green) !important;
+}
+
+.neruds-dataset-discovery__button--secondary:hover {
+  background: rgba(44, 85, 48, 0.08) !important;
 }
 
 .neruds-dataset-discovery__status,

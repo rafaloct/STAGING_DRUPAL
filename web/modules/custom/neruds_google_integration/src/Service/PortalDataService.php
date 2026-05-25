@@ -207,34 +207,31 @@ final class PortalDataService {
         ];
       }
 
+      $lastRequestFailed = FALSE;
       try {
-        $query = [
-          'q' => "'" . $folderId . "' in parents and trashed = false",
-          'fields' => 'files(id,name,mimeType,webViewLink,webContentLink,modifiedTime,size,iconLink)',
-          'orderBy' => 'folder,name',
-          'pageSize' => 50,
-          'supportsAllDrives' => 'true',
-          'includeItemsFromAllDrives' => 'true',
-        ];
-        $headers = $this->googleRequestHeaders();
+        $files = [];
         if ($accessToken !== '') {
-          $headers['Authorization'] = 'Bearer ' . $accessToken;
+          $files = $this->requestDriveFiles($folderId, $accessToken, '', $lastRequestFailed);
         }
-        else {
-          $query['key'] = $key;
+
+        // Fallback for public folders when service-account visibility is empty.
+        if ($files === [] && $key !== '') {
+          $files = $this->requestDriveFiles($folderId, '', $key, $lastRequestFailed);
         }
-        $response = $this->httpClient->request('GET', 'https://www.googleapis.com/drive/v3/files', [
-          'headers' => $headers,
-          'query' => $query,
-          'timeout' => 6,
-        ]);
-        $data = json_decode((string) $response->getBody(), TRUE) ?: [];
-        return [
+
+        $response = [
           'folderId' => $folderId,
           'folderUrl' => 'https://drive.google.com/drive/folders/' . rawurlencode($folderId),
-          'files' => $this->normalizeDriveFiles($data['files'] ?? []),
+          'files' => $files,
           'updated' => gmdate('c'),
         ];
+        if ($files === []) {
+          $response['notice'] = $lastRequestFailed
+            ? 'No files were returned. Confirm the folder has files and is shared with the configured service account or API key.'
+            : 'No public files were found in this folder yet.';
+        }
+
+        return $response;
       }
       catch (\Throwable $exception) {
         $this->logger->warning('Google Drive request failed. Check folder sharing, credentials, API enablement, quota, and referrer restrictions.');
@@ -246,6 +243,42 @@ final class PortalDataService {
         ];
       }
     });
+  }
+
+  /**
+   * Queries Google Drive folder files with either bearer token or API key.
+   */
+  private function requestDriveFiles(string $folderId, string $accessToken, string $apiKey, bool &$requestFailed): array {
+    try {
+      $query = [
+        'q' => "'" . $folderId . "' in parents and trashed = false",
+        'fields' => 'files(id,name,mimeType,webViewLink,webContentLink,modifiedTime,size,iconLink)',
+        'orderBy' => 'folder,name',
+        'pageSize' => 50,
+        'supportsAllDrives' => 'true',
+        'includeItemsFromAllDrives' => 'true',
+      ];
+
+      $headers = $this->googleRequestHeaders();
+      if ($accessToken !== '') {
+        $headers['Authorization'] = 'Bearer ' . $accessToken;
+      }
+      elseif ($apiKey !== '') {
+        $query['key'] = $apiKey;
+      }
+
+      $response = $this->httpClient->request('GET', 'https://www.googleapis.com/drive/v3/files', [
+        'headers' => $headers,
+        'query' => $query,
+        'timeout' => 6,
+      ]);
+      $data = json_decode((string) $response->getBody(), TRUE) ?: [];
+      return $this->normalizeDriveFiles($data['files'] ?? []);
+    }
+    catch (\Throwable) {
+      $requestFailed = TRUE;
+      return [];
+    }
   }
 
   /**

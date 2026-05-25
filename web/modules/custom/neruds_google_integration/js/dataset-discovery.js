@@ -51,18 +51,31 @@
     });
   };
 
-  const renderProjectOptions = (state, data) => {
-    if (state.project.dataset.loaded === "true") {
+  const populateSelect = (select, rows, selectedValue) => {
+    if (!select) {
       return;
     }
-    const projects = data.facets && data.facets.projetos ? data.facets.projetos : [];
-    projects.forEach((project) => {
+    const existingOptions = new Set(Array.from(select.options).map((option) => option.value));
+    (rows || []).forEach((row) => {
+      const label = text(row.label);
+      if (!label || existingOptions.has(label)) {
+        return;
+      }
       const option = document.createElement("option");
-      option.value = text(project.label);
-      option.textContent = `${text(project.label)} (${Number(project.count || 0)})`;
-      state.project.append(option);
+      option.value = label;
+      option.textContent = `${label} (${Number(row.count || 0)})`;
+      select.append(option);
+      existingOptions.add(label);
     });
-    state.project.dataset.loaded = "true";
+    if (selectedValue) {
+      select.value = selectedValue;
+    }
+  };
+
+  const renderFacetOptions = (state, data) => {
+    const facets = data.facets || {};
+    populateSelect(state.project, facets.projetos, state.filters.project);
+    populateSelect(state.sigilo, facets.sigilo, state.filters.sigilo);
   };
 
   const renderCard = (item, auditEndpoint) => {
@@ -95,10 +108,11 @@
     const auditLink = createElement("a", "", "Ver citacoes");
     const auditUrl = buildUrl(auditEndpoint, { project: item.projeto_origem || "" });
     auditLink.href = auditUrl.toString();
-    const requestLink = createElement("a", "", "Solicitar acesso");
-    requestLink.href = `mailto:neruds@uft.edu.br?subject=${encodeURIComponent("Solicitacao de acesso: " + text(item.nome_dataset || ""))}`;
-    actions.append(auditLink, requestLink);
 
+    const requestLink = createElement("a", "", "Solicitar acesso");
+    requestLink.href = `mailto:neruds@uft.edu.br?subject=${encodeURIComponent(`Solicitacao de acesso: ${text(item.nome_dataset || "")}`)}`;
+
+    actions.append(auditLink, requestLink);
     card.append(header, description, meta, counts, actions);
     return card;
   };
@@ -120,7 +134,7 @@
 
   const renderSkeletonGrid = (count = 6) => {
     const container = createElement("div", "neruds-dataset-discovery__grid");
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       container.append(renderSkeletonCard());
     }
     return container;
@@ -137,15 +151,125 @@
     items.forEach((item) => state.results.append(renderCard(item, state.auditEndpoint)));
   };
 
+  const updateHash = (state) => {
+    const hash = new URLSearchParams();
+    if (state.filters.q) {
+      hash.set("q", state.filters.q);
+    }
+    if (state.filters.project) {
+      hash.set("project", state.filters.project);
+    }
+    if (state.filters.sigilo) {
+      hash.set("sigilo", state.filters.sigilo);
+    }
+    hash.set("offset", String(state.pagination.offset));
+    hash.set("limit", String(state.pagination.limit));
+    window.location.hash = hash.toString();
+  };
+
+  const readHash = (state) => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) {
+      return;
+    }
+    const params = new URLSearchParams(hash);
+    state.filters.q = params.get("q") || "";
+    state.filters.project = params.get("project") || "";
+    state.filters.sigilo = params.get("sigilo") || "";
+    state.pagination.offset = Number.parseInt(params.get("offset") || "0", 10) || 0;
+    state.pagination.limit = Number.parseInt(params.get("limit") || "20", 10) || 20;
+  };
+
+  const updatePagination = (state) => {
+    const container = state.pagination.container;
+    if (!container) {
+      return;
+    }
+
+    if (state.pagination.total <= 0) {
+      container.innerHTML = "";
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(state.pagination.total / state.pagination.limit));
+    const currentPage = Math.min(totalPages, Math.floor(state.pagination.offset / state.pagination.limit) + 1);
+    const start = Math.min(state.pagination.total, state.pagination.offset + 1);
+    const end = Math.min(state.pagination.offset + state.pagination.limit, state.pagination.total);
+    const atFirstPage = state.pagination.offset <= 0;
+    const atLastPage = state.pagination.offset + state.pagination.limit >= state.pagination.total;
+
+    container.innerHTML = `
+      <div class="neruds-pagination" role="navigation" aria-label="Paginacao de datasets">
+        <p class="neruds-pagination__info">
+          Mostrando <strong>${start}-${end}</strong> de <strong>${state.pagination.total}</strong>
+        </p>
+
+        <div class="neruds-pagination__controls">
+          <button class="neruds-pagination__btn" data-pagination-action="first" ${atFirstPage ? "disabled" : ""}>Primeira</button>
+          <button class="neruds-pagination__btn" data-pagination-action="prev" ${atFirstPage ? "disabled" : ""}>Anterior</button>
+          <span class="neruds-pagination__page">Pagina <strong>${currentPage}</strong> de <strong>${totalPages}</strong></span>
+          <button class="neruds-pagination__btn" data-pagination-action="next" ${atLastPage ? "disabled" : ""}>Proxima</button>
+          <button class="neruds-pagination__btn" data-pagination-action="last" ${atLastPage ? "disabled" : ""}>Ultima</button>
+        </div>
+
+        <label for="pagination-limit" class="neruds-pagination__limit-label">
+          Itens por pagina:
+          <select id="pagination-limit">
+            <option value="10" ${state.pagination.limit === 10 ? "selected" : ""}>10</option>
+            <option value="20" ${state.pagination.limit === 20 ? "selected" : ""}>20</option>
+            <option value="50" ${state.pagination.limit === 50 ? "selected" : ""}>50</option>
+          </select>
+        </label>
+      </div>
+    `;
+
+    container.querySelectorAll("[data-pagination-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.getAttribute("data-pagination-action");
+        if (action === "first") {
+          state.pagination.offset = 0;
+        }
+        if (action === "prev") {
+          state.pagination.offset = Math.max(0, state.pagination.offset - state.pagination.limit);
+        }
+        if (action === "next") {
+          const nextOffset = state.pagination.offset + state.pagination.limit;
+          if (nextOffset < state.pagination.total) {
+            state.pagination.offset = nextOffset;
+          }
+        }
+        if (action === "last") {
+          state.pagination.offset = Math.max(0, (totalPages - 1) * state.pagination.limit);
+        }
+        updateHash(state);
+        loadDatasets(state);
+      });
+    });
+
+    const limitSelect = container.querySelector("#pagination-limit");
+    if (limitSelect) {
+      limitSelect.addEventListener("change", (event) => {
+        const value = Number.parseInt(event.target.value, 10);
+        state.pagination.limit = Number.isNaN(value) ? 20 : value;
+        state.pagination.offset = 0;
+        updateHash(state);
+        loadDatasets(state);
+      });
+    }
+  };
+
   const loadDatasets = async (state) => {
     const params = {
-      q: state.query.value.trim(),
-      project: state.project.value,
-      limit: state.pagination.limit.toString(),
-      offset: state.pagination.offset.toString(),
+      q: state.filters.q,
+      project: state.filters.project,
+      sigilo: state.filters.sigilo,
+      limit: String(state.pagination.limit),
+      offset: String(state.pagination.offset),
     };
+
     setStatus(state, "Carregando datasets...");
-    state.results.replaceChildren(renderSkeletonGrid(state.pagination.limit));
+    state.results.replaceChildren(renderSkeletonGrid(Math.min(6, state.pagination.limit)));
+
     try {
       const response = await window.fetchWithRetry(buildUrl(state.datasetsEndpoint, params), {
         headers: { Accept: "application/json" },
@@ -153,118 +277,40 @@
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
+
       const data = await response.json();
-      state.pagination.total = data.total || 0;
-      renderProjectOptions(state, data);
+      state.pagination.total = Number(data.total || 0);
+      renderFacetOptions(state, data);
       renderSummary(state, data);
       renderResults(state, data);
       updatePagination(state);
-      setStatus(state, `${Number(data.total || 0)} datasets encontrados.`);
-    }
-    catch (error) {
+
+      const shown = Array.isArray(data.items) ? data.items.length : 0;
+      setStatus(state, `Exibindo ${shown} de ${state.pagination.total} datasets.`);
+    } catch (error) {
       state.results.innerHTML = "";
+      if (state.pagination.container) {
+        state.pagination.container.innerHTML = "";
+      }
       renderSummary(state, { total: 0, items: [] });
       setStatus(state, "Nao foi possivel carregar os datasets agora.");
     }
   };
 
-  const updatePagination = (state) => {
-    const totalPages = Math.ceil(state.pagination.total / state.pagination.limit);
-    const currentPage = Math.floor(state.pagination.offset / state.pagination.limit) + 1;
-    const start = state.pagination.offset + 1;
-    const end = Math.min(state.pagination.offset + state.pagination.limit, state.pagination.total);
-
-    const paginationHTML = `
-      <div class="neruds-pagination" role="navigation" aria-label="Paginação de datasets">
-        <p class="neruds-pagination__info">
-          Mostrando <strong>${start}-${end}</strong> de <strong>${state.pagination.total}</strong>
-        </p>
-
-        <div class="neruds-pagination__controls">
-          <button class="neruds-pagination__btn" id="pagination-first"
-                  ${state.pagination.offset === 0 ? 'disabled' : ''}>
-            Primeira
-          </button>
-
-          <button class="neruds-pagination__btn" id="pagination-prev"
-                  ${state.pagination.offset === 0 ? 'disabled' : ''}>
-            Anterior
-          </button>
-
-          <span class="neruds-pagination__page">
-            Página <strong>${currentPage}</strong> de <strong>${totalPages}</strong>
-          </span>
-
-          <button class="neruds-pagination__btn" id="pagination-next"
-                  ${state.pagination.offset + state.pagination.limit >= state.pagination.total ? 'disabled' : ''}>
-            Próxima
-          </button>
-
-          <button class="neruds-pagination__btn" id="pagination-last"
-                  ${state.pagination.offset + state.pagination.limit >= state.pagination.total ? 'disabled' : ''}>
-            Última
-          </button>
-        </div>
-
-        <label for="pagination-limit" class="neruds-pagination__limit-label">
-          Itens por página:
-          <select id="pagination-limit">
-            <option value="10" ${state.pagination.limit === 10 ? 'selected' : ''}>10</option>
-            <option value="20" ${state.pagination.limit === 20 ? 'selected' : ''}>20</option>
-            <option value="50" ${state.pagination.limit === 50 ? 'selected' : ''}>50</option>
-          </select>
-        </label>
-      </div>
-    `;
-
-    const paginationContainer = state.pagination.container;
-    if (paginationContainer) {
-      paginationContainer.innerHTML = paginationHTML;
-
-      document.getElementById('pagination-first')?.addEventListener('click', () => {
-        state.pagination.offset = 0;
-        loadDatasets(state);
-        window.location.hash = `offset=0&limit=${state.pagination.limit}`;
-      });
-
-      document.getElementById('pagination-prev')?.addEventListener('click', () => {
-        state.pagination.offset = Math.max(0, state.pagination.offset - state.pagination.limit);
-        loadDatasets(state);
-        window.location.hash = `offset=${state.pagination.offset}&limit=${state.pagination.limit}`;
-      });
-
-      document.getElementById('pagination-next')?.addEventListener('click', () => {
-        const newOffset = state.pagination.offset + state.pagination.limit;
-        if (newOffset < state.pagination.total) {
-          state.pagination.offset = newOffset;
-          loadDatasets(state);
-          window.location.hash = `offset=${state.pagination.offset}&limit=${state.pagination.limit}`;
-        }
-      });
-
-      document.getElementById('pagination-last')?.addEventListener('click', () => {
-        const totalPages = Math.ceil(state.pagination.total / state.pagination.limit);
-        state.pagination.offset = (totalPages - 1) * state.pagination.limit;
-        loadDatasets(state);
-        window.location.hash = `offset=${state.pagination.offset}&limit=${state.pagination.limit}`;
-      });
-
-      document.getElementById('pagination-limit')?.addEventListener('change', (e) => {
-        state.pagination.limit = parseInt(e.target.value);
-        state.pagination.offset = 0;
-        loadDatasets(state);
-        window.location.hash = `offset=0&limit=${state.pagination.limit}`;
-      });
-    }
+  const syncFiltersFromUi = (state) => {
+    state.filters.q = state.query.value.trim();
+    state.filters.project = state.project.value;
+    state.filters.sigilo = state.sigilo.value;
   };
 
-  const restorePaginationFromHash = (state) => {
-    const hash = window.location.hash.substring(1);
-    if (hash) {
-      const params = new URLSearchParams(hash);
-      state.pagination.offset = parseInt(params.get('offset')) || 0;
-      state.pagination.limit = parseInt(params.get('limit')) || 20;
-    }
+  const resetFilters = (state) => {
+    state.filters = { q: "", project: "", sigilo: "" };
+    state.query.value = "";
+    state.project.value = "";
+    state.sigilo.value = "";
+    state.pagination.offset = 0;
+    updateHash(state);
+    loadDatasets(state);
   };
 
   Drupal.behaviors.nerudsDatasetDiscovery = {
@@ -278,9 +324,16 @@
           form: root.querySelector("[data-dataset-filters]"),
           query: root.querySelector("#neruds-dataset-query"),
           project: root.querySelector("#neruds-dataset-project"),
+          sigilo: root.querySelector("#neruds-dataset-sigilo"),
+          reset: root.querySelector("[data-dataset-reset]"),
           status: root.querySelector("[data-dataset-status]"),
           summary: root.querySelector("[data-dataset-summary]"),
           results: root.querySelector("[data-dataset-results]"),
+          filters: {
+            q: "",
+            project: "",
+            sigilo: "",
+          },
           pagination: {
             container: root.querySelector("[data-dataset-pagination]"),
             offset: 0,
@@ -289,12 +342,35 @@
           },
         };
 
+        readHash(state);
+        state.query.value = state.filters.q;
+
         state.form.addEventListener("submit", (event) => {
           event.preventDefault();
+          syncFiltersFromUi(state);
+          state.pagination.offset = 0;
+          updateHash(state);
           loadDatasets(state);
         });
-        state.project.addEventListener("change", () => loadDatasets(state));
-        restorePaginationFromHash(state);
+
+        state.project.addEventListener("change", () => {
+          syncFiltersFromUi(state);
+          state.pagination.offset = 0;
+          updateHash(state);
+          loadDatasets(state);
+        });
+
+        state.sigilo.addEventListener("change", () => {
+          syncFiltersFromUi(state);
+          state.pagination.offset = 0;
+          updateHash(state);
+          loadDatasets(state);
+        });
+
+        if (state.reset) {
+          state.reset.addEventListener("click", () => resetFilters(state));
+        }
+
         loadDatasets(state);
       });
     },

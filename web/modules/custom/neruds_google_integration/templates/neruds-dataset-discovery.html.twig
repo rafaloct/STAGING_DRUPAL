@@ -27,7 +27,14 @@
         <option value="">{{ 'Todos'|t }}</option>
       </select>
     </div>
+    <div class="neruds-dataset-discovery__field">
+      <label for="neruds-dataset-sigilo">{{ 'Sigilo'|t }}</label>
+      <select id="neruds-dataset-sigilo" name="sigilo">
+        <option value="">{{ 'Todos'|t }}</option>
+      </select>
+    </div>
     <button type="submit">{{ 'Filtrar'|t }}</button>
+    <button type="button" class="neruds-dataset-discovery__button--secondary" data-dataset-reset>{{ 'Limpar'|t }}</button>
   </form>
 
   <div class="neruds-dataset-discovery__status" data-dataset-status role="status" aria-live="polite">
